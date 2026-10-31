@@ -1,35 +1,51 @@
-# AWS EC2 Docker Deployment
+# AWS EC2 & ECS Docker Deployment
 
-A simple Hello World web application containerized using Docker and deployed on an AWS EC2 instance. The application is publicly accessible through port **8081**.
+A simple Hello World web application containerized using Docker and deployed on **AWS EC2** and **Amazon ECS Fargate**. The Docker image is stored in Amazon Elastic Container Registry (ECR), and the application is publicly accessible.
 
 ## 🚀 Live Application
 
-**Application URL:** http://3.107.9.244:8081/
+**EC2 Deployment:**  
+http://3.107.9.244:8081/
+
+**ECS Fargate Deployment:**  
+http://3.26.151.244/
+
+> Note: Public IP addresses can change when instances or ECS tasks are replaced. Update these URLs if the IP changes.
 
 ## 🛠️ Tech Stack
 
-- **Cloud Provider:** Amazon Web Services (AWS)
-- **Compute:** Amazon EC2
-- **Operating System:** Ubuntu Server 24.04 LTS
-- **Containerization:** Docker
-- **Web Server:** Nginx (Alpine)
-- **Frontend:** HTML and CSS
-- **Version Control:** Git and GitHub
+| Category | Technology |
+|---|---|
+| Cloud Provider | Amazon Web Services (AWS) |
+| Compute | Amazon EC2 |
+| Container Orchestration | Amazon ECS Fargate |
+| Container Registry | Amazon ECR |
+| Operating System | Ubuntu Server 24.04 LTS |
+| Containerization | Docker |
+| Web Server | Nginx (Alpine) |
+| Frontend | HTML, CSS |
+| Version Control | Git and GitHub |
 
 ## 🏗️ Architecture
 
-1. An Ubuntu EC2 instance is provisioned on AWS.
-2. Docker is installed and configured on the EC2 instance.
-3. A static Hello World application is created using HTML and CSS.
-4. A Docker image is built using the Nginx Alpine base image.
-5. The Docker container is started with port mapping `8081:80`.
-6. AWS Security Group allows inbound TCP traffic on port `8081`.
-7. Users can access the application through the EC2 public IP.
+The application follows this deployment workflow:
+
+1. Provision an Ubuntu EC2 instance on AWS.
+2. Install and configure Docker on the EC2 instance.
+3. Develop a static Hello World application using HTML and CSS.
+4. Create a Docker image using the Nginx Alpine base image.
+5. Run the Docker container on EC2 using port mapping `8081:80`.
+6. Create an Amazon ECR repository and push the Docker image.
+7. Configure an IAM role to allow EC2 to authenticate with Amazon ECR.
+8. Create an ECS cluster using AWS Fargate.
+9. Create an ECS task definition referencing the ECR image.
+10. Deploy the application using an ECS service with one desired task.
+11. Configure a public IP and security group to allow inbound traffic on port `80`.
 
 ## 📁 Project Structure
 
 ```text
-aws-docker-deployment/
+aws-devops-task/
 ├── Dockerfile
 ├── index.html
 └── README.md
@@ -37,7 +53,7 @@ aws-docker-deployment/
 
 ## 🐳 Docker Configuration
 
-The application uses the following Dockerfile:
+The application uses Nginx Alpine to serve the static HTML page.
 
 ```dockerfile
 FROM nginx:alpine
@@ -47,11 +63,9 @@ COPY index.html /usr/share/nginx/html/index.html
 EXPOSE 80
 ```
 
-## ⚙️ Deployment Instructions
+## ⚙️ EC2 Deployment
 
 ### 1. Connect to EC2
-
-Connect to your Ubuntu EC2 instance using SSH:
 
 ```bash
 ssh -i your-key.pem ubuntu@YOUR_EC2_PUBLIC_IP
@@ -69,15 +83,9 @@ sudo systemctl enable docker
 
 ### 3. Build the Docker Image
 
-Navigate to the project directory:
-
 ```bash
 cd aws-devops-task
-```
 
-Build the image:
-
-```bash
 docker build -t hello-world-app .
 ```
 
@@ -90,38 +98,134 @@ docker run -d \
   hello-world-app
 ```
 
-### 5. Verify the Container
+### 5. Verify the Deployment
 
 ```bash
 docker ps
-```
 
-Test the application locally on EC2:
-
-```bash
 curl http://localhost:8081
 ```
 
-### 6. Access the Application
-
-Open the following URL in your browser:
+Open the EC2 application:
 
 ```text
 http://YOUR_EC2_PUBLIC_IP:8081
 ```
 
+## 📦 Amazon ECR Configuration
+
+An ECR repository named `hello-world-app` was created in the `ap-southeast-2` region.
+
+**ECR Repository URI:**
+
+```text
+293532442732.dkr.ecr.ap-southeast-2.amazonaws.com/hello-world-app
+```
+
+### 1. Authenticate with ECR
+
+The EC2 instance uses an IAM role named `EC2-ECR-Push-Role` with the `AmazonEC2ContainerRegistryPowerUser` managed policy.
+
+```bash
+aws sts get-caller-identity
+
+aws ecr get-login-password --region ap-southeast-2 \
+  | docker login \
+  --username AWS \
+  --password-stdin 293532442732.dkr.ecr.ap-southeast-2.amazonaws.com
+```
+
+### 2. Tag the Docker Image
+
+```bash
+docker tag hello-world-app:latest \
+  293532442732.dkr.ecr.ap-southeast-2.amazonaws.com/hello-world-app:latest
+```
+
+### 3. Push the Image to ECR
+
+```bash
+docker push \
+  293532442732.dkr.ecr.ap-southeast-2.amazonaws.com/hello-world-app:latest
+```
+
+## ☁️ Amazon ECS Fargate Deployment
+
+The same Docker image stored in ECR was deployed using Amazon ECS Fargate.
+
+### ECS Configuration
+
+| Resource | Configuration |
+|---|---|
+| Cluster | `hello-world-cluster` |
+| Launch Type | AWS Fargate |
+| Task Definition | `hello-world-task:1` |
+| Service | `hello-world-service` |
+| Desired Tasks | 1 |
+| CPU | 1 vCPU |
+| Memory | 3 GB |
+| Operating System | Linux/X86_64 |
+| Container Port | 80 |
+| Protocol | TCP |
+| Image Registry | Amazon ECR |
+
+### Deployment Steps
+
+1. Create an ECS cluster named `hello-world-cluster`.
+2. Create a task definition named `hello-world-task`.
+3. Select AWS Fargate as the launch type.
+4. Configure the container image using the ECR repository URI.
+5. Set the container port to `80`.
+6. Create an ECS service named `hello-world-service`.
+7. Set the desired task count to `1`.
+8. Configure the default VPC and public subnets.
+9. Enable public IP assignment.
+10. Configure a security group allowing inbound TCP traffic on port `80`.
+11. Deploy and verify that the ECS task reaches the `RUNNING` state.
+
 ## 🔐 AWS Security Group Configuration
 
-Configure the EC2 Security Group with these inbound rules:
+### EC2 Security Group
 
 | Type | Protocol | Port | Source |
 |---|---|---:|---|
 | SSH | TCP | 22 | My IP |
 | Custom TCP | TCP | 8081 | 0.0.0.0/0 |
 
-Port `8081` is publicly accessible so users can access the web application.
+### ECS Security Group
 
-## 📌 Docker Commands
+| Type | Protocol | Port | Source |
+|---|---|---:|---|
+| HTTP | TCP | 80 | 0.0.0.0/0 |
+
+The ECS security group allows public HTTP access to the application running inside the Fargate task.
+
+## 🖥️ Infrastructure Specifications
+
+### EC2 Instance
+
+| Resource | Configuration |
+|---|---|
+| Instance Type | t3.small |
+| vCPU | 2 |
+| RAM | 2 GiB |
+| Storage | 15 GiB gp3 |
+| Operating System | Ubuntu Server 24.04 LTS |
+
+The `t3.small` instance was selected as a lightweight environment suitable for running Docker and hosting a simple static web application.
+
+### ECS Fargate Task
+
+| Resource | Configuration |
+|---|---|
+| CPU | 1 vCPU |
+| Memory | 3 GB |
+| Desired Tasks | 1 |
+| Launch Type | Fargate |
+
+Fargate was selected to deploy the container without managing the underlying servers.
+
+## 📌 Useful Docker Commands
 
 | Command | Purpose |
 |---|---|
@@ -134,22 +238,26 @@ Port `8081` is publicly accessible so users can access the web application.
 
 ## 🎯 Project Outcome
 
-- Successfully provisioned an AWS EC2 instance.
-- Installed and configured Docker.
-- Built a custom Docker image.
-- Deployed a containerized web application.
-- Configured AWS Security Group rules for public access.
-- Verified application accessibility through the EC2 public IP on port `8081`.
+- Provisioned and configured an AWS EC2 instance.
+- Installed Docker and containerized a static web application.
+- Built and tested a custom Docker image.
+- Configured public access through EC2 Security Groups.
+- Created an Amazon ECR repository.
+- Authenticated EC2 with ECR using an IAM role.
+- Pushed the Docker image to Amazon ECR.
+- Created an ECS Fargate cluster and task definition.
+- Deployed the container using an ECS service.
+- Verified the application through its public ECS task IP.
 
 ## 🔮 Future Improvements
 
-- Push the Docker image to Amazon Elastic Container Registry (ECR).
-- Deploy the same containerized application using Amazon ECS.
 - Configure HTTPS using a domain and TLS certificate.
-- Implement automated deployment using CI/CD.
+- Automate image builds and deployments using GitHub Actions.
+- Add application monitoring and centralized logging.
+- Configure automated scaling for ECS services.
 
 ---
 
-**Project:** AWS EC2 Docker Deployment  
-**Status:** Successfully deployed on AWS EC2  
+**Project:** AWS EC2 & ECS Docker Deployment  
+**Status:** Successfully deployed on EC2 and Amazon ECS Fargate  
 **Author:** Suman Ranjan
